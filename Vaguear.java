@@ -1,181 +1,160 @@
 import java.util.Random;
 import java.util.concurrent.Semaphore;
-import robot.RobotLegoEV3;
 
 /**
- * Classe que define o comportamento Vaguear, no qual usa o RobotEV3.
+ * Ficheiro: Vaguear.java
+ * Descrição: Classe que define o comportamento autónomo "Vaguear" em ambiente headless.
+ * Estende a classe Thread para execução concorrente e utiliza uma máquina de estados 
+ * gerida por semáforos para efetuar deslocamentos e rotações aleatórias contínuas.
  */
 public class Vaguear extends Thread {
 
-	// Atributos
+    // Objeto responsável por controlar os movimentos do robô
+    private RobotEV3 robot;
 
-	private RobotEV3 robot;
+    // Instância global para manipular dados partilhados de configuração e depuração
+    private Dados dados;
+    
+    // Gerador de valores aleatórios para as direções do vaguear
+    private Random random;
+    
+    // Semáforo de sincronização para controlar a ativação e suspensão do comportamento
+    private Semaphore vaguearAFuncionar;
 
-	// Instância para manipular os dados compartilhados entre as classes
-	private Dados dados;
-	private Random random;
-	private Semaphore vaguearAFuncionar;
+    // Constantes que definem os estados possíveis da máquina de estados
+    private static final int TERMINAR = 0;     // Estado para encerrar a execução da thread
+    private static final int GERAR_RANDOM = 1; // Estado para gerar movimento aleatório
+    private static final int FAZER_NADA = 2;   // Estado de espera (bloqueado à escuta do semáforo)
 
-	// Estados possíveis
-	private static final int TERMINAR = 0;
-	private static final int GERAR_RANDOM = 1;
-	private static final int FAZER_NADA = 2;
+    // Variável que guarda o estado atual da máquina de estados
+    private int estado;
 
-	// Estado Inicial
-	private int estado;
+    /**
+     * Construtor da classe Vaguear (versão headless).
+     * Valida os parâmetros de entrada e inicializa os atributos necessários.
+     *
+     * @param dados (Dados): Objeto com os dados partilhados do sistema.
+     * @param robot (RobotEV3): Objeto que representa o robô e permite controlá-lo.
+     */
+    public Vaguear(Dados dados, RobotEV3 robot) {
+        // Validação defensiva contra NullPointerException
+        if (dados == null) {
+            throw new IllegalArgumentException("VAGUEAR: dados não pode ser nulo.");
+        }
+        if (robot == null) {
+            throw new IllegalArgumentException("VAGUEAR: robot não pode ser nulo.");
+        }
 
-	/**
-	 * Construtor da classe "Vaguear". Inicializa o robot e os atributos
-	 * necessários.
-	 *
-	 * @param gui_TP1           Interface gráfica de controle.
-	 * @param dados             Dados compartilhados.
-	 * @param vaguearAFuncionar Semáforo para controlar o comportamento de
-	 *                          "Vaguear".
-	 */
-	public Vaguear(GUI_TP1 gui_TP1, Dados dados, RobotEV3 robot) {
-		this.dados = gui_TP1.dados;
-		this.robot = robot;
+        this.dados = dados;
+        this.robot = robot;
 
-		this.random = new Random();
-		this.vaguearAFuncionar = new Semaphore(0);
+        this.random = new Random();
+        
+        // Inicializa o semáforo com 0 permissões para começar em pausa (bloqueado)
+        this.vaguearAFuncionar = new Semaphore(0);
 
-		this.estado = FAZER_NADA;
-	}
+        // Define o estado inicial como inativo/em espera
+        this.estado = FAZER_NADA;
+    }
 
-	/**
-	 * Método que será executado quando a thread for iniciada.
-	 */
-	@Override
-	public void run() {
-		while (estado != TERMINAR) {
-			executarMaquinaDeEstados();
+    /**
+     * Método principal executado quando a thread "Vaguear" é iniciada.
+     * Mantém o ciclo ativo, executando a máquina de estados até o estado passar a TERMINAR.
+     */
+    @Override
+    public void run() {
+        while (estado != TERMINAR) {
+            executarMaquinaDeEstados();
+        }
+    }
 
-		}
-	}
+    /**
+     * Método que implementa a lógica da máquina de estados do comportamento Vaguear.
+     * Gere as transições entre `FAZER_NADA`, `GERAR_RANDOM` e `TERMINAR`.
+     */
+    public void executarMaquinaDeEstados() {
 
-	/**
-	 * Método que implementa a máquina de estados do comportamento Vaguear.
-	 * 
-	 */
-	public void executarMaquinaDeEstados() {
+        switch (estado) {
+        case FAZER_NADA:
+            try {
+                // Bloqueia a thread de forma síncrona até receber uma permissão (release) via semáforo
+                vaguearAFuncionar.acquire();
+            } catch (InterruptedException e) {
+                // Tratamento seguro da interrupção da thread
+                System.err.println("Vaguear: A thread foi interrompida enquanto aguardava permissão para vaguear.");
+                Thread.currentThread().interrupt();
+            }
+            break;
 
-		switch (estado) {
-		case FAZER_NADA:
-			try {
-				
-				//dados.enviarParaConsola("Vaguear: Aguarda permissão para vaguear...");
-				// System.out.println("Vaguear: Aguarda permissão para vaguear...");
+        case GERAR_RANDOM:
+            // Executa o movimento aleatório e adormece durante 1.5 segundos antes da próxima iteração
+            gerarRandom();
+            dormir(1500);
+            break;
 
-				//dados.enviarParaConsola(
-						//"Vaguear: Permissões antes do ACQUIRE(): " + vaguearAFuncionar.availablePermits());
-				// System.out.println("Vaguear: Permissões antes do ACQUIRE(): " +
-				// vaguearAFuncionar.availablePermits());
+        case TERMINAR:
+            // Regista o término do comportamento na consola de depuração
+            dados.enviarParaConsola("Vaguear: TERMINAR");
+            break;
 
-				vaguearAFuncionar.acquire();
+        default:
+            // Em caso de anomalia, força a transição segura para o estado TERMINAR
+            estado = TERMINAR;
+            dados.enviarParaConsola("Vaguear: TERMINAR");
+            break;
+        }
+    }
 
-				//dados.enviarParaConsola("Vaguear: Permissão adquirida, em execução");
-				// System.out.println("Vaguear: Permissão adquirida, em execução");
+    /**
+     * Ativa o comportamento "Vaguear", alterando o estado para GERAR_RANDOM
+     * e libertando o semáforo para destravar a execução da thread.
+     */
+    public void funcionar() {
+        estado = GERAR_RANDOM;
+        
+        // Liberta o semáforo para permitir que o acquire() prossiga
+        vaguearAFuncionar.release();
+    }
 
-				//dados.enviarParaConsola("Vaguear: Permissões após ACQUIRE(): " + vaguearAFuncionar.availablePermits());
-				// System.out.println("Vaguear: Permissões após ACQUIRE(): " +
-				// vaguearAFuncionar.availablePermits());
+    /**
+     * Coloca o comportamento em pausa, alterando o estado atual para FAZER_NADA.
+     */
+    public void parar() {
+        estado = FAZER_NADA;
+    }
 
-			} catch (InterruptedException e) {
-				System.err.println("Vaguear: A thread foi interrompida enquanto aguardava permissão para vaguear.");
-				e.printStackTrace();
-			}
-			break;
+    /**
+     * Para completamente o robô de forma síncrona, define o estado como TERMINAR 
+     * e liberta o semáforo para garantir que a thread sai de qualquer bloqueio pendente.
+     */
+    public void pararRobot() {
+        robot.Parar(true); // Comando de paragem síncrona ao hardware/simulador
+        estado = TERMINAR; // Define o estado como TERMINAR para sair do ciclo do run
+        vaguearAFuncionar.release(); // Liberta o semáforo para destravar qualquer acquire pendente
+    }
 
-		case GERAR_RANDOM:
-			gerarRandom();
-			dormir(1500);
-			break;
+    // ==========================================
+    // OUTROS MÉTODOS AUXILIARES
+    // ==========================================
 
-		case TERMINAR:
-			dados.enviarParaConsola("Vaguear: TERMINAR");
-			// System.out.println("Vaguear: TERMINAR");
-			break;
+    /**
+     * Invoca o método de movimento aleatório do robô (Vaguear).
+     */
+    private void gerarRandom() {
+        robot.metodoVaguear();
+    }
 
-		default:
-			estado = TERMINAR; // Transição para o estado TERMINAR
-			dados.enviarParaConsola("Vaguear: TERMINAR");
-			break;
-		}
-	}
-
-	/**
-	 * Método que ativa o comportamento "Vaguear".
-	 */
-	public void funcionar() {
-
-		
-			//dados.enviarParaConsola("Vaguear: Permissões iniciais: " + vaguearAFuncionar.availablePermits());
-			// System.out.println("Vaguear: Permissões iniciais: " +
-			// vaguearAFuncionar.availablePermits());
-			estado = GERAR_RANDOM;
-
-			vaguearAFuncionar.release();
-
-			//dados.enviarParaConsola(
-					//"Vaguear: Permissões após release do funcionar: " + vaguearAFuncionar.availablePermits());
-			// System.out.println("Vaguear: Permissões após release do funcionar: " +
-			// vaguearAFuncionar.availablePermits());
-	}
-
-	/**
-	 * Método para parar o comportamento de "Vaguear".
-	 */
-	public void parar() {
-		estado = FAZER_NADA;
-
-		//dados.enviarParaConsola("Vaguear: METODO PARAR VAGUEAR");
-		// System.out.println("Vaguear: METODO PARAR VAGUEAR");
-
-
-		//dados.enviarParaConsola("Vaguear: Estado após parar: " + estado);
-		// System.out.println("Vaguear: Estado após parar: " + estado);
-
-		//dados.enviarParaConsola("Vaguear: Permissões após release do parar: " + vaguearAFuncionar.availablePermits());
-		// System.out.println("Vaguear: Permissões após release do parar: " +
-		// vaguearAFuncionar.availablePermits());
-
-		
-	}
-
-	/**
-	 * Método para parar completamente o robot e encerrar a thread.
-	 */
-	public void pararRobot() {
-		robot.Parar(true); // Parar o robot
-
-			estado = TERMINAR; // Define o estado como TERMINAR
-			vaguearAFuncionar.release(); // Liberta o semáforo para garantir que saia do acquire
-	
-	}
-
-	// Outros Métodos
-
-	/**
-	 * Método que gera uma ação aleatória para o comportamento "Vaguear".
-	 */
-	private void gerarRandom() {
-		robot.metodoVaguear();
-	}
-
-	/**
-	 * Faz a thread dormir por um período de tempo especificado.
-	 *
-	 * @param tempoMillis (long): Tempo em milissegundos para o qual a thread deve
-	 *                    dormir.
-	 */
-	private void dormir(long tempoMillis) {
-		try {
-			Thread.sleep(tempoMillis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
-
-	
+    /**
+     * Método auxiliar privado para adormecer a thread atual por um determinado período.
+     * Trata exceções de interrupção em conformidade com as boas práticas de concorrência.
+     *
+     * @param tempoMillis (long): Tempo de pausa em milissegundos.
+     */
+    private void dormir(long tempoMillis) {
+        try {
+            Thread.sleep(tempoMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 }

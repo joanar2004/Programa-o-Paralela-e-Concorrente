@@ -1,211 +1,184 @@
 import java.util.concurrent.Semaphore;
 
-import robot.RobotLegoEV3;
-
 /**
- * Classe que define o comportamento "Evitar". <br>
- * Esse comportamento faz com que o robot detecte obstáculos usando um sensor de
- * toque e execute uma série de comandos para desviar do obstáculo.
+ * Ficheiro: Evitar.java
+ * Descrição: Classe que define o comportamento autónomo "Evitar" em ambiente headless.
+ * Estende a classe Thread para correr de forma concorrente e utiliza uma máquina de 
+ * estados gerida por semáforos para detetar obstáculos através do sensor de toque e 
+ * executar manobras de desvio.
  */
 public class Evitar extends Thread {
 
-	// Objeto que controla os movimentos do robot
-	private RobotEV3 robot;
+    // Objeto de alto nível que controla os movimentos físicos/simulados do robot
+    private RobotEV3 robot;
 
-	// Semáforo que controla o comportamento "Evitar"
-	private Semaphore evitarAFuncionar;
-	
-	// Instância para manipular os dados compartilhados entre as classes
-	private Dados dados;
+    // Semáforo de sincronização que controla a ativação e suspensão do comportamento "Evitar"
+    private Semaphore evitarAFuncionar;
+    
+    // Instância global para manipular os dados partilhados de configuração e depuração
+    private Dados dados;
 
-	// Estados possíveis
-	private static final int TERMINAR = 0;
-	private static final int LER_SENSOR = 1;
-	private static final int FAZER_NADA = 2;
+    // Constantes que definem os estados possíveis da máquina de estados do comportamento
+    private static final int TERMINAR = 0;    // Estado para encerrar a execução da thread
+    private static final int LER_SENSOR = 1;  // Estado para ler sensores e executar o desvio
+    private static final int FAZER_NADA = 2;  // Estado de espera/pausa (bloqueado pelo semáforo)
 
-	// Estado Inicial
-	private int estado;
+    // Variável que armazena o estado atual da máquina de estados
+    private int estado;
 
-	/**
-	 * Construtor da classe Evitar, que inicializa os atributos necessários para o
-	 * comportamento.
-	 *
-	 * @param gui_TP1 (GUI_TP1): Interface gráfica para controlar o robot, que
-	 *                contém os dados compartilhados.
-	 * @param dados   (Dados): Objeto que armazena dados compartilhados entre
-	 *                diferentes comportamentos.
-	 * @param robot   (RobotEV3): Objeto que representa o robot, permitindo o
-	 *                controlo dos seus movimentos.
-	 */
-	public Evitar(GUI_TP1 gui_TP1, Dados dados, RobotEV3 robot) {
-		// Verificações e tratamento de excepções para evitar NullPointerException
-		if (gui_TP1 == null) {
-			throw new IllegalArgumentException("EVITAR: gui_TP1 não pode ser nulo.");
-		}
-		if (dados == null) {
-			throw new IllegalArgumentException("EVITAR: dados não pode ser nulo.");
-		}
-
-		if (robot == null) {
-			throw new IllegalArgumentException("EVITAR: robot não pode ser nulo.");
-		}
-
-		this.dados = gui_TP1.dados;
-		
-		this.evitarAFuncionar = new Semaphore(0);
-		
-		this.robot = robot;
-
-		this.estado = FAZER_NADA;
-	}
-
-	/**
-	 * Método que executa o ciclo, no qual chama a máquina de estados até que o
-	 * estado seja TERMINAR.
-	 */
-	@Override
-	public void run() {
-		while (estado != TERMINAR) {
-			executarMaquinaDeEstados();
-		}
-	}
-
-	/**
-     * Método que implementa a máquina de estados do comportamento Evitar.
-     * Dependendo do estado atual, executa ações como verificar o sensor e
-     * executar o comportamento de evitar.
+    /**
+     * Construtor da classe Evitar (versão headless).
+     * Valida os argumentos recebidos e inicializa os parâmetros do comportamento.
+     *
+     * @param dados (Dados): Objeto que armazena os dados partilhados do sistema.
+     * @param robot (RobotEV3): Objeto responsável por comandar os movimentos do robot.
      */
-	public void executarMaquinaDeEstados() {
-		long t = 0;
-		switch (estado) {
+    public Evitar(Dados dados, RobotEV3 robot) {
+        // Validação defensiva para evitar exceções do tipo NullPointerException
+        if (dados == null) {
+            throw new IllegalArgumentException("EVITAR: dados não pode ser nulo.");
+        }
+        if (robot == null) {
+            throw new IllegalArgumentException("EVITAR: robot não pode ser nulo.");
+        }
 
-		case FAZER_NADA:
-			try {
-				dados.enviarParaConsola("Evitar: Aguarda Permissão para evitar...");
-				// System.out.println("Evitar: Aguarda Permissão para evitar...");
-				// System.out.println("Evitar: Permissões de evitar antes do ACQUIRE(): " + evitarAFuncionar.availablePermits());
-				//dados.enviarParaConsola(
-						//"Evitar: Permissões de evitar antes do ACQUIRE(): " + evitarAFuncionar.availablePermits());
-				
-				evitarAFuncionar.acquire();
-				
-				
-				//dados.enviarParaConsola("Evitar: Permissão de evitar adquirida, em execução");
-				// System.out.println("Evitar: Permissão de evitar adquirida, em execução");
-				
-				//dados.enviarParaConsola(
-						//"Evitar: Permissões de evitar após ACQUIRE(): " + evitarAFuncionar.availablePermits());
-				// System.out.println("Evitar: Permissões de evitar após ACQUIRE(): " + evitarAFuncionar.availablePermits());
-			
-				estado = LER_SENSOR;
-			} catch (InterruptedException e) {
-				System.err.println("Evitar: A thread foi interrompida enquanto aguardava permissão para evitar.");
-				e.printStackTrace();
-			}
-			break;
+        this.dados = dados;
+        
+        // Inicializa o semáforo com 0 permissões para que a thread comece em pausa (bloqueada)
+        this.evitarAFuncionar = new Semaphore(0);
+        
+        this.robot = robot;
+        
+        // Define o estado inicial da máquina de estados como inativo/em espera
+        this.estado = FAZER_NADA;
+    }
 
-		case LER_SENSOR:
-			if(robot.metodoEvitar()){
-			//CALCULAR TEMPO EVITAR
-			t = tempoEvitar();
-			}
-			else {t = 500;}
-			//System.out.println("A dormir " + t + " millis");
-			dormir(t);
-			break;
+    /**
+     * Método principal executado quando a thread "Evitar" é iniciada.
+     * Mantém o ciclo de vida ativo, invocando continuamente a máquina de estados
+     * até que o estado passe a ser TERMINAR.
+     */
+    @Override
+    public void run() {
+        while (estado != TERMINAR) {
+            executarMaquinaDeEstados();
+        }
+    }
 
-		case TERMINAR:
-			dados.enviarParaConsola("Evitar: TERMINAR");
-			// System.out.println("Evitar: TERMINAR");
-			break;
+    /**
+     * Método que implementa a lógica da máquina de estados do comportamento Evitar.
+     * Controla o fluxo de execução com base no estado atual (`FAZER_NADA`, `LER_SENSOR`, `TERMINAR`).
+     */
+    public void executarMaquinaDeEstados() {
+        long t = 0; // Variável para armazenar o tempo de pausa (duração da manobra)
+        
+        switch (estado) {
 
-		default:
-			// Define o estado como TERMINAR
-			estado = TERMINAR;
-			dados.enviarParaConsola("Evitar: TERMINAR");
-			break;
-		}
-	}
+        case FAZER_NADA:
+            try {
+                // Regista na consola que o comportamento está em espera de autorização
+                dados.enviarParaConsola("Evitar: Aguarda Permissão para evitar...");
+                
+                // Bloqueia a thread de forma síncrona até receber uma permissão (release)
+                evitarAFuncionar.acquire();
+                
+                // Após desbloquear, transita para o estado de leitura de sensores
+                estado = LER_SENSOR;
+            } catch (InterruptedException e) {
+                // Trata a interrupção da thread de forma segura
+                System.err.println("Evitar: A thread foi interrompida enquanto aguardava permissão para evitar.");
+                Thread.currentThread().interrupt();
+            }
+            break;
 
-	/**
-	 * Método que inicia o comportamento Evitar, alterando o estado para LERSENSOR
-	 * e liberta o semáforo para permitir a execução.
-	 */
-	public void funcionar() {
-		
-			//dados.enviarParaConsola("Evitar: Permissões iniciais: " + evitarAFuncionar.availablePermits());
-			// System.out.println("Evitar: Permissões iniciais: " + evitarAFuncionar.availablePermits());
-	
-			estado = LER_SENSOR;
-	
-			evitarAFuncionar.release();
-	
-			//dados.enviarParaConsola("Evitar: Permissões após release do funcionar: " + evitarAFuncionar.availablePermits());
-			// System.out.println("Evitar: Permissões após release do funcionar: " + evitarAFuncionar.availablePermits());
-			
-	}
+        case LER_SENSOR:
+            // Verifica se o sensor de toque detetou um obstáculo através do robot
+            if (robot.metodoEvitar()) {
+                // Se detetou, calcula o tempo exato necessário para concluir a manobra de desvio
+                t = tempoEvitar();
+            } else {
+                // Caso contrário, define uma pausa curta padrão antes da próxima verificação
+                t = 500;
+            }
+            // Adormece a thread durante o tempo calculado para permitir que o robot execute o movimento
+            dormir(t);
+            break;
 
-	/**
-	 * Método que para o comportamento "Evitar", mudando o estado para FAZER_NADA e
-	 * liberta o semáforo para permitir a execução.
-	 */
-	public void parar() {
-	
-			//dados.enviarParaConsola("Evitar: METODO PARAR EVITAR");
-			// System.out.println("Evitar: METODO PARAR EVITAR");
-	
-			estado = FAZER_NADA;
-	
-			//dados.enviarParaConsola("Evitar: Estado após parar: " + estado);
-			// System.out.println("Evitar: Estado após parar: " + estado);
-	
-			//dados.enviarParaConsola("Evitar: Permissões após release do parar: " + evitarAFuncionar.availablePermits());
-			//System.out.println("Evitar: Permissões após release do parar: " + evitarAFuncionar.availablePermits());
-			
+        case TERMINAR:
+            // Regista o encerramento do comportamento na consola
+            dados.enviarParaConsola("Evitar: TERMINAR");
+            break;
 
-	
-	}
-
-	/**
-	 * Para o robot e encerra o comportamento Evitar definindo o estado como
-	 * TERMINAR.
-	 */
-	public void pararRobot() {
-		    robot.Parar(true);
+        default:
+            // Em caso de estado corrompido ou inválido, força a transição para TERMINAR
             estado = TERMINAR;
-            evitarAFuncionar.release();
-	}
+            dados.enviarParaConsola("Evitar: TERMINAR");
+            break;
+        }
+    }
 
-	// Outros Métodos
+    /**
+     * Ativa o comportamento "Evitar", mudando o estado para LER_SENSOR 
+     * e libertando o semáforo para destravar a execução da thread.
+     */
+    public void funcionar() {
+        estado = LER_SENSOR;
+        evitarAFuncionar.release(); // Liberta 1 permissão no semáforo
+    }
 
+    /**
+     * Coloca o comportamento em pausa, alterando o estado atual para FAZER_NADA.
+     */
+    public void parar() {
+        estado = FAZER_NADA;
+    }
 
-	/**
-	 * Faz a thread dormir por um período de tempo especificado.
-	 *
-	 * @param tempoMillis (long): Tempo em milissegundos para o qual a thread deve
-	 *                    dormir.
-	 */
-	private void dormir(long tempoMillis) {
-		try {
-			Thread.sleep(tempoMillis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
-	public long tempoEvitar() {
-		double t = 0;
-		
-	    double distanciaReta = 15;  // em centímetros
-	    double velocidade = 20;     // em centímetros por segundo
-	    
-	     t = distanciaReta / velocidade; // tempo para a primeira parte (em segundos)
-	    
-	    double raio = 4.5;          // em centímetros
-	    double angulo = Math.PI / 2; 
-	    double distanciaCurva = raio * angulo;
-	    
-	    t += distanciaCurva / velocidade; // tempo para a curva (em segundos)
-	    
-	    return (long)(t * 1000); // Convertendo para milissegundos
-	}
+    /**
+     * Para completamente o robot de forma síncrona, define o estado como TERMINAR 
+     * e liberta o semáforo para garantir que a thread sai de qualquer bloqueio pendente.
+     */
+    public void pararRobot() {
+        robot.Parar(true); // Comando de paragem síncrona ao hardware/simulador
+        estado = TERMINAR;
+        evitarAFuncionar.release(); // Destrava o acquire() caso esteja bloqueado
+    }
+
+    /**
+     * Método auxiliar privado para adormecer a thread atual por um determinado período.
+     * Captura e trata exceções de interrupção em conformidade com as boas práticas em Java.
+     *
+     * @param tempoMillis (long): Tempo de pausa em milissegundos.
+     */
+    private void dormir(long tempoMillis) {
+        try {
+            Thread.sleep(tempoMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    /**
+     * Calcula o tempo teórico em milissegundos necessário para o robô executar 
+     * a manobra completa de evasão (recuar em linha reta + curva de desvio).
+     * 
+     * @return long: O tempo total da manobra em milissegundos.
+     */
+    public long tempoEvitar() {
+        double t = 0;
+        double distanciaReta = 15;  // Distância de recuo em centímetros
+        double velocidade = 20;     // Velocidade estimada de deslocação (cm/s)
+        
+        // Calcula o tempo gasto no movimento retilíneo para trás
+        t = distanciaReta / velocidade;
+        
+        double raio = 4.5;          // Raio da curva em centímetros
+        double angulo = Math.PI / 2; // Ângulo de rotação (90 graus em radianos)
+        double distanciaCurva = raio * angulo; // Comprimento do arco da curva
+        
+        // Adiciona o tempo necessário para executar a curva
+        t += distanciaCurva / velocidade;
+        
+        // Converte o tempo total de segundos para milissegundos e retorna como long
+        return (long)(t * 1000);
+    }
 }

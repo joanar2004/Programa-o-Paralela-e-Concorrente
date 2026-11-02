@@ -1,6 +1,7 @@
 /**
- * A interface IRobotEV3 define as operações que podem ser realizadas por um
- * robot.
+ * Ficheiro: IRobotEV3.java
+ * Descrição: A interface IRobotEV3 define as operações que podem ser realizadas por um
+ * robot, servindo como contrato de baixo nível para implementações reais ou simuladas.
  */
 public interface IRobotEV3 {
 
@@ -57,7 +58,7 @@ public interface IRobotEV3 {
      * Método para parar o robot.
      *
      * @param sincrono (boolean): Se o comando de parada deve ser síncrono
-     *                         (verdadeiro) ou assíncrono (falso).
+     *                        (verdadeiro) ou assíncrono (falso).
      */
     void Parar(boolean sincrono);
 

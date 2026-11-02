@@ -1,199 +1,197 @@
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * Classe que simula o comportamento do robot EV3. Implementa a interface
- * IRobotEV3 e fornece métodos para controle do robot, simulando os movimentos e
- * respostas dos sensores.
+ * Ficheiro: RobotEV3Simulado.java
+ * Descrição: Classe que simula o comportamento do robot EV3 em ambiente headless. 
+ * Implementa a interface IRobotEV3 e fornece métodos para o controlo simulado, 
+ * gerando movimentos proporcionais e respostas aleatórias de sensores através de 
+ * pausas (Thread.sleep) e probabilidades estatísticas.
  */
 public class RobotEV3Simulado implements IRobotEV3 {
 
-	// Indica se há um processo
-	private AtomicBoolean haProcesso;
+    // Variável atómica para gerir o controlo de exclusividade de processos em execução
+    private AtomicBoolean haProcesso;
 
-	// Indica se o robot está ativo
-	private boolean estaAtivo;
+    // Indicador lógico do estado de atividade do robô simulado
+    private boolean estaAtivo;
 
-	/**
-	 * Construtor da classe RobotEV3Simulado. Inicializa o estado do robot.
-	 *
-	 * @param dados (Dados): Dados que podem ser utilizados pela simulação.
-	 */
-	public RobotEV3Simulado(Dados dados) {
-		this.haProcesso = new AtomicBoolean(false);
-		this.estaAtivo = true;
-	}
+    /**
+     * Construtor da classe RobotEV3Simulado. 
+     * Inicializa os controlos de concorrência e define o robô como ativo por defeito.
+     *
+     * @param dados (Dados): Objeto de configuração (mantido por compatibilidade com a arquitetura).
+     */
+    public RobotEV3Simulado(Dados dados) {
+        this.haProcesso = new AtomicBoolean(false);
+        this.estaAtivo = true;
+    }
 
-	// Implementação dos métodos da interface
+    // ==========================================
+    // IMPLEMENTAÇÃO DOS MÉTODOS DA INTERFACE IRobotEV3
+    // ==========================================
 
-	/**
-	 * Abre a conectividade com o robot.
-	 * 
-	 * @param nomeRobot (String): Nome do robot.
-	 * @return boolean: true se sucesso, false caso contrário.
-	 */
-	@Override
-	public boolean OpenEV3(String nomeRobot) {
-		if (!this.haProcesso.getAndSet(true)) {
-			// System.out.printf("RobotEV3Simulado: Robot %s está aberto.%n", dados.getNomeRobot());
-			dormir(1000L);
-			this.estaAtivo = true;
-			return true;
-		} else {
-			// System.out.println(">>> Outro processo já está em andamento.");
-			return false;
-		}
-	}
+    /**
+     * Simula a abertura de conectividade com o robô de forma atómica.
+     * 
+     * @param nomeRobot (String): Nome identificador do robô.
+     * @return boolean: true se obteve acesso com sucesso, false caso já exista um processo ativo.
+     */
+    @Override
+    public boolean OpenEV3(String nomeRobot) {
+        // Tenta adquirir o acesso exclusivo de forma atómica (false -> true)
+        if (!this.haProcesso.getAndSet(true)) {
+            dormir(1000L); // Simula o tempo de ligação
+            this.estaAtivo = true;
+            return true;
+        } else {
+            // Caso já esteja ocupado, rejeita a abertura
+            return false;
+        }
+    }
 
-	/**
-	 * Move o robot em linha reta.
-	 *
-	 * @param distancia (int): Distância em centímetros a ser percorrida.
-	 */
-	@Override
-	public void Reta(int distancia) {
-		if (estaOK()) {
-			long quantoDorme = (long) (1.0 * ((distancia * 1000) / 30));
-			dormir(Math.abs((long) (quantoDorme)));
-			// System.out.println("RobotEV3Simulado: Reta " + Math.abs(distancia) + " cm");
-		}
-	}
+    /**
+     * Simula o movimento do robô em linha reta, calculando o tempo de espera 
+     * proporcional à distância fornecida.
+     *
+     * @param distancia (int): Distância em centímetros a percorrer (positivo = frente, negativo = trás).
+     */
+    @Override
+    public void Reta(int distancia) {
+        if (estaOK()) {
+            // Calcula o tempo de simulação de movimento proporcional à distância (velocidade de referência: 30 cm/s)
+            long quantoDorme = (long) (1.0 * ((distancia * 1000) / 30));
+            dormir(Math.abs((long) (quantoDorme)));
+        }
+    }
 
-	/**
-	 * Faz o robot curvar à esquerda.
-	 *
-	 * @param raio   (float): Raio da curva.
-	 * @param angulo (int): Ângulo em graus da curva.
-	 */
-	@Override
-	public void CurvarEsquerda(float raio, int angulo) {
-		if (estaOK()) {
-			float quantoDorme = (float) ((angulo * Math.PI * raio) / 180);
-			dormir((long) quantoDorme);
-			// System.out.println("RobotEV3Simulado: Curva Esquerda -> raio: " + raio + " angulo: "
-			// + angulo);
-		}
-	}
+    /**
+     * Simula uma curva para a esquerda com base no raio e ângulo especificados.
+     *
+     * @param raio   (float): Raio da curva em centímetros.
+     * @param angulo (int): Ângulo de rotação em graus.
+     */
+    @Override
+    public void CurvarEsquerda(float raio, int angulo) {
+        if (estaOK()) {
+            // Calcula o comprimento do arco da circunferência para determinar o tempo de pausa simulado
+            float quantoDorme = (float) ((angulo * Math.PI * raio) / 180);
+            dormir((long) quantoDorme);
+        }
+    }
 
-	/**
-	 * Faz o robot curvar à direita.
-	 *
-	 * @param raio   (float): Raio da curva.
-	 * @param angulo (int): Ângulo em graus da curva.
-	 */
-	@Override
-	public void CurvarDireita(float raio, int angulo) {
-		if (estaOK()) {
-			float quantoDorme = (float) ((angulo * Math.PI * raio) / 180);
-			dormir((long) quantoDorme);
-			// System.out.println("RobotEV3Simulado: Curva Direita -> raio: " + raio + " angulo: " +
-			// angulo);
-		}
-	}
+    /**
+     * Simula uma curva para a direita com base no raio e ângulo especificados.
+     *
+     * @param raio   (float): Raio da curva em centímetros.
+     * @param angulo (int): Ângulo de rotação em graus.
+     */
+    @Override
+    public void CurvarDireita(float raio, int angulo) {
+        if (estaOK()) {
+            // Calcula o comprimento do arco da circunferência para determinar o tempo de pausa simulado
+            float quantoDorme = (float) ((angulo * Math.PI * raio) / 180);
+            dormir((long) quantoDorme);
+        }
+    }
 
-	/**
-	 * Sensor de Toque.
-	 * 
-	 * @param S_1(int): porta do sensor de toque.
-	 * @return int: 1 se o sensor foi ativado, 0 se não, ou -1 se o robot não está
-	 *         ativo.
-	 */
-	@Override
-	public int SensorToque(int S_1) {
-		if (estaOK()) {
-			double probToque = Math.random();
-		
-			//System.out.printf("RobotEV3Simulado: Sensor de toque na porta %d ativado. Probabilidade: %.2f%n", S_1, probToque);
-			
-			// 10% probabilidade de toque
-			return probToque < 0.10 ? 1 : 0; 
-		}
-		return -1;
-	}
+    /**
+     * Simula a leitura do sensor de toque de forma probabilística.
+     * 
+     * @param S_1 (int): Número da porta do sensor de toque.
+     * @return int: Retorna 1 se detetar obstáculo (10% de probabilidade), 0 caso contrário, ou -1 se inativo.
+     */
+    @Override
+    public int SensorToque(int S_1) {
+        if (estaOK()) {
+            double probToque = Math.random();
+            
+            // Atribui 10% de probabilidade de simular a deteção de um obstáculo físico
+            return probToque < 0.10 ? 1 : 0; 
+        }
+        return -1;
+    }
 
-	/**
-	 * Lê o sensor ultrasons.
-	 *
-	 * @param S_2 (int): Porta do sensor ultrasons.
-	 * @return float: Distância medida pelo sensor ou -1 se o robot não está ativo.
-	 */
-	@Override
-	public float SensorUS(int S_2) {
-		if (estaOK()) {
-			float distancia = (float) (Math.random() * 255);
-			//System.out.printf("RobotEV3Simulado: Sensor de Ultrassons na porta %d mediu: %.2f cm%n", S_2, distancia);
-			return distancia;
-		}
-		return -1;
-	}
+    /**
+     * Simula a leitura do sensor ultrassónico gerando uma distância aleatória.
+     *
+     * @param S_2 (int): Número da porta do sensor ultrassónico.
+     * @return float: Distância simulada em centímetros (até 255 cm) ou -1 se inativo.
+     */
+    @Override
+    public float SensorUS(int S_2) {
+        if (estaOK()) {
+            // Gera uma distância aleatória simulada até 255 cm
+            float distancia = (float) (Math.random() * 255);
+            return distancia;
+        }
+        return -1;
+    }
 
-	/**
-	 * Para o robot.
-	 *
-	 * @param sincrono Se a parada deve ser síncrona ou assíncrona (não utilizado na
-	 *                 simulação).
-	 */
-	@Override
-	public void Parar(boolean sincrono) {
-		if (estaOK()) {
-			// System.out.println("RobotEV3Simulado: Robot parado...");
-			this.haProcesso.set(false);
-			dormir(250L);
-		}
-	}
+    /**
+     * Simula a paragem dos motores do robô.
+     *
+     * @param sincrono (boolean): Define se a paragem é síncrona ou assíncrona.
+     */
+    @Override
+    public void Parar(boolean sincrono) {
+        if (estaOK()) {
+            this.haProcesso.set(false); // Liberta o controlo atómico de processos
+            dormir(250L);                // Simula o tempo de resposta da paragem
+        }
+    }
 
-	/**
-	 * Fecha o robot.
-	 */
-	@Override
-	public void CloseEV3() {
-		if (estaOK()) {
-			// System.out.printf("RobotEV3Simulado: CloseEV3%n");
-			this.haProcesso.set(false);
-			dormir(1000L);
-			Terminar();
-			this.estaAtivo = false;
-		}
-	}
+    /**
+     * Simula o fecho da sessão de comunicação com o robô.
+     */
+    @Override
+    public void CloseEV3() {
+        if (estaOK()) {
+            this.haProcesso.set(false);
+            dormir(1000L);
+            Terminar();
+            this.estaAtivo = false;
+        }
+    }
 
-	/**
-	 * Termina o processo do robot e encerra a aplicação.
-	 */
-	@Override
-	public void Terminar() {
-		if (estaOK()) {
-			// System.out.print("RobotEV3Simulado: Terminar...\nRobotEV3Simulado: CloseEV3\n");
-			dormir(250L);
-			this.estaAtivo = false;
-			System.exit(1);
-		}
-	}
+    /**
+     * Termina o processo do robô de forma controlada. 
+     * Nota: O System.exit(1) foi removido propositadamente para permitir testes contínuos em ambiente headless.
+     */
+    @Override
+    public void Terminar() {
+        if (estaOK()) {
+            dormir(250L);
+            this.estaAtivo = false;
+        }
+    }
 
-	// Métodos auxiliares
+    // ==========================================
+    // MÉTODOS AUXILIARES
+    // ==========================================
 
-	/**
-	 * Verifica se o robot está ativo.
-	 *
-	 * @return true se o robot está ativo, false caso contrário.
-	 */
-	private boolean estaOK() {
-		if (!this.estaAtivo) {
-			// System.out.printf("%n>>> Canal de Comunicação não OK%n>>> Verifique robot e
-			// ligação bluetooth...");
-			return false;
-		}
-		return true;
-	}
+    /**
+     * Verifica se o canal de simulação do robô se encontra operacional e ativo.
+     *
+     * @return boolean: true se o robô estiver ativo, false caso contrário.
+     */
+    private boolean estaOK() {
+        if (!this.estaAtivo) {
+            return false;
+        }
+        return true;
+    }
 
-	/**
-	 * Faz a thread dormir por um determinado tempo.
-	 *
-	 * @param tempoMillis (long): Tempo em milissegundos que a thread deve dormir.
-	 */
-	private void dormir(long tempoMillis) {
-		try {
-			Thread.sleep(tempoMillis);
-		} catch (InterruptedException interruptedException) {
-			Thread.currentThread().interrupt();
-		}
-	}
+    /**
+     * Método auxiliar privado para adormecer a thread atual durante um período simulado.
+     * Trata exceções de interrupção em conformidade com as boas práticas de concorrência.
+     *
+     * @param tempoMillis (long): Tempo de pausa em milissegundos.
+     */
+    private void dormir(long tempoMillis) {
+        try {
+            Thread.sleep(tempoMillis);
+        } catch (InterruptedException interruptedException) {
+            Thread.currentThread().interrupt();
+        }
+    }
 }

@@ -1,221 +1,186 @@
 import java.util.Random;
 import java.util.concurrent.Semaphore;
 
-import robot.RobotLegoEV3;
-
 /**
- * Classe que define o comportamento "Fugir". <br>
- * Este comportamento permite que o robot se afaste de obstáculo 
- * detectado pelo sensor.
+ * Ficheiro: Fugir.java
+ * Descrição: Classe que define o comportamento autónomo "Fugir" em ambiente headless.
+ * Estende a classe Thread para execução concorrente e utiliza uma máquina de estados 
+ * gerida por semáforos para permitir que o robô se afaste de obstáculos detetados 
+ * pelo sensor ultrassónico.
  */
 public class Fugir extends Thread {
 
-	// Objeto que controla os movimentos do robot
-	private RobotEV3 robot;
+    // Objeto responsável por controlar os movimentos do robô
+    private RobotEV3 robot;
 
-	// Semáforo que controla a execução do comportamento Fugir
-	private Semaphore fugirAFuncionar;
+    // Semáforo de sincronização para controlar a ativação e suspensão do comportamento
+    private Semaphore fugirAFuncionar;
 
-	// Instância para manipular os dados compartilhados entre as classes
-	private Dados dados;
+    // Instância global para manipular dados partilhados de configuração e depuração
+    private Dados dados;
 
-	// Objeto para gerar valores aleatórios
-	private Random random;
+    // Gerador de valores aleatórios (utilizado nas manobras de fuga)
+    private Random random;
 
-	// Estados possíveis
-	private static final int TERMINAR = 0;
-	private static final int LER_SENSOR = 1;
-	private static final int FAZER_NADA = 2;
+    // Constantes que definem os estados possíveis da máquina de estados
+    private static final int TERMINAR = 0;    // Estado para encerrar a execução da thread
+    private static final int LER_SENSOR = 1;  // Estado para ler o sensor e executar a fuga
+    private static final int FAZER_NADA = 2;  // Estado de espera (bloqueado à escuta do semáforo)
 
-	// Estado Inicial
-	private int estado;
+    // Variável que guarda o estado atual da máquina de estados
+    private int estado;
 
-	/**
-	 * Construtor da classe Fugir, que inicializa os parâmetros necessários para o
-	 * comportamento.
-	 *
-	 * @param gui_TP1 (GUI_TP1): Interface gráfica usada para interagir com o robot
-	 *                e enviar dados.
-	 * @param dados   (Dados): Objeto que contém dados compartilhados entre
-	 *                diferentes comportamentos.
-	 * @param robot   (RobotEV3): Objeto que representa o robot e permite
-	 *                controlá-lo.
-	 */
-	public Fugir(GUI_TP1 gui_TP1, Dados dados, RobotEV3 robot) {
-		// Verificações e tratamento de excepções para evitar NullPointerException
-		if (gui_TP1 == null) {
-			throw new IllegalArgumentException("FUGIR: gui_TP1 não pode ser nulo.");
-		}
-		if (dados == null) {
-			throw new IllegalArgumentException("FUGIR: dados não pode ser nulo.");
-		}
+    /**
+     * Construtor da classe Fugir (versão headless).
+     * Valida os parâmetros de entrada e inicializa os atributos necessários.
+     *
+     * @param dados (Dados): Objeto com os dados partilhados do sistema.
+     * @param robot (RobotEV3): Objeto que representa o robô e permite controlá-lo.
+     */
+    public Fugir(Dados dados, RobotEV3 robot) {
+        // Validação defensiva contra NullPointerException
+        if (dados == null) {
+            throw new IllegalArgumentException("FUGIR: dados não pode ser nulo.");
+        }
+        if (robot == null) {
+            throw new IllegalArgumentException("FUGIR: robot não pode ser nulo.");
+        }
 
-		if (robot == null) {
-			throw new IllegalArgumentException("FUGIR: robot não pode ser nulo.");
-		}
+        this.dados = dados;
+        this.random = new Random();
+        
+        // Inicializa o semáforo com 0 permissões para que a thread comece em pausa (bloqueada)
+        this.fugirAFuncionar = new Semaphore(0);
+        
+        this.robot = robot;
+        
+        // Define o estado inicial como inativo/em espera
+        this.estado = FAZER_NADA;
+    }
 
-		this.dados = gui_TP1.dados;
+    /**
+     * Método principal executado quando a thread "Fugir" é iniciada.
+     * Mantém o ciclo ativo, executando a máquina de estados até o estado passar a TERMINAR.
+     */
+    @Override
+    public void run() {
+        while (estado != TERMINAR) {
+            executarMaquinaDeEstados();
+        }
+    }
 
-		// Objeto para gerar valores aleatórios
-		this.random = new Random();
+    /**
+     * Método que implementa a lógica da máquina de estados do comportamento Fugir.
+     * Gere as transições entre `FAZER_NADA`, `LER_SENSOR` e `TERMINAR`.
+     */
+    public void executarMaquinaDeEstados() {
+        long t = 0; // Armazena o tempo de duração da manobra de fuga
+        
+        switch (estado) {
 
-		// Semáforo que controla o comportamento "fugir"
-		this.fugirAFuncionar = new Semaphore(0);
+        case FAZER_NADA:
+            try {
+                // Bloqueia a thread de forma síncrona até receber uma permissão (release)
+                fugirAFuncionar.acquire();
+                
+                // Assim que obtém permissão, transita para a leitura de sensores
+                estado = LER_SENSOR;
+            } catch (InterruptedException e) {
+                // Tratamento seguro da interrupção da thread
+                System.err.println("Fugir: A thread foi interrompida enquanto aguardava permissão para fugir.");
+                Thread.currentThread().interrupt();
+            }
+            break;
 
-		this.robot = robot;
+        case LER_SENSOR:
+            // Verifica se o robô detetou algum obstáculo/inimigo através do sensor correspondente
+            if (robot.metodoFugir()) {
+                // Se detetou, calcula o tempo exato que a manobra de fuga irá demorar
+                t = tempoFugir();
+            } else {
+                // Caso contrário, aguarda um intervalo curto padrão antes de nova verificação
+                t = 500;
+            }
+            // Adormece a thread durante o tempo calculado para dar tempo ao robô de executar o movimento
+            dormir(t);
+            break;
 
-		this.estado = FAZER_NADA;
-	}
+        case TERMINAR:
+            // Garante que o estado se mantém em terminar para encerrar o ciclo
+            estado = TERMINAR;
+            break;
 
-	/**
-	 * Método principal executado quando a thread Fugir é iniciada. Controla a
-	 * execução do comportamento de fuga, alternando entre diferentes estados.
-	 */
-	@Override
-	public void run() {
-		while (estado != TERMINAR) {
-			executarMaquinaDeEstados();
-		}
-	}
+        default:
+            // Em caso de anomalia, força o encerramento da máquina de estados
+            estado = TERMINAR;
+            break;
+        }
+    }
 
-	/**
-	 * Método que implementa a máquina de estados do comportamento Fugir. Dependendo do
-	 * estado atual, executa ações como verificar o sensor ou realizar movimentos de
-	 * fuga.
-	 */
-	public void executarMaquinaDeEstados() {
-		long t = 0;
-		switch (estado) {
+    /**
+     * Ativa o comportamento "Fugir", alterando o estado para LER_SENSOR 
+     * e libertando o semáforo para destravar a execução da thread.
+     */
+    public void funcionar() {
+        estado = LER_SENSOR;
+        fugirAFuncionar.release(); // Liberta 1 permissão no semáforo
+    }
 
-		case FAZER_NADA:
-			try {
-				
-				//dados.enviarParaConsola("Fugir: Aguarda permissão para fugir...");
-				// System.out.println("Fugir: Aguarda permissão para fugir...");
-				
-				//dados.enviarParaConsola("Fugir: Permissões de Fugir antes do ACQUIRE(): " + fugirAFuncionar.availablePermits());
-				// System.out.println("Fugir: Permissões de Fugir antes do ACQUIRE(): " + fugirAFuncionar.availablePermits());
-				fugirAFuncionar.acquire();
-				
-				
-				//dados.enviarParaConsola("Fugir: Permissão de Fugir adquirida, em execução");
-				// System.out.println("Fugir: Permissão de Fugir adquirida, em execução");
-				
-				//dados.enviarParaConsola("Fugir: Permissões de Fugir após ACQUIRE(): " + fugirAFuncionar.availablePermits());
-				// System.out.println("Fugir: Permissões de Fugir após ACQUIRE(): " + fugirAFuncionar.availablePermits());
-				estado = LER_SENSOR;
-				
-			} catch (InterruptedException e) {
-				System.err.println("Fugir: A thread foi interrompida enquanto aguardava permissão para fugir.");
-				e.printStackTrace();
-			}
-			break;
+    /**
+     * Coloca o comportamento em pausa, mudando o estado atual para FAZER_NADA
+     * e registando a ação na consola de depuração.
+     */
+    public void parar() {
+        dados.enviarParaConsola("Fugir: METODO PARAR FUGIR");
+        estado = FAZER_NADA;
+    }
 
-		case LER_SENSOR:
-			// Verifica se o sensor detecta um obstáculo e muda o estado para EXECUTAR
-			
-				
-				if(robot.metodoFugir()) {
-					t = tempoFugir();
-					}
-					else {t = 500;}
-					//System.out.println("A dormir " + t + " millis");
-					dormir(t);
-					break;
-			
+    /**
+     * Para completamente o robô de forma síncrona, define o estado como TERMINAR 
+     * e liberta o semáforo para garantir que a thread sai de qualquer bloqueio pendente.
+     */
+    public void pararRobot() {
+        robot.Parar(true); // Comando de paragem síncrona ao hardware/simulador
+        estado = TERMINAR;
+        fugirAFuncionar.release(); // Destrava o acquire() caso esteja bloqueado
+        dados.enviarParaConsola("Fugir: Parar Robot");
+    }
 
-		case TERMINAR:
+    /**
+     * Método auxiliar privado para adormecer a thread atual por um determinado período.
+     * Trata exceções de interrupção em conformidade com as boas práticas de concorrência.
+     *
+     * @param tempoMillis (long): Tempo de pausa em milissegundos.
+     */
+    private void dormir(long tempoMillis) {
+        try {
+            Thread.sleep(tempoMillis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
 
-			// Não faz nada, loop será encerrado
-			estado = TERMINAR; // Transição para o estado TERMINAR
-			//dados.enviarParaConsola("Fugir: TERMINAR");
-			// System.out.println("Fugir: TERMINAR");
-			break;
-
-		default:
-			// Em caso de erro, define o estado como TERMINAR
-			estado = TERMINAR;
-			break;
-		}
-	}
-
-	/**
-	 * Método que inicia o comportamento "Fugir", alterando o estado para LERSENSOR
-	 * e liberta o semáforo para permitir a execução.
-	 */
-	public void funcionar() {
-	
-			//dados.enviarParaConsola("Fugir: Permissões iniciais: " + fugirAFuncionar.availablePermits());
-			// System.out.println("Fugir: Permissões iniciais: " + fugirAFuncionar.availablePermits());
-
-			estado = LER_SENSOR;
-		
-			fugirAFuncionar.release();
-			//dados.enviarParaConsola("Fugir: Permissões após release do funcionar: " + fugirAFuncionar.availablePermits());
-			// System.out.println("Fugir: Permissões após release do funcionar: " + fugirAFuncionar.availablePermits());
-	}
-
-	/**
-	 * Método que para o comportamento "Fugir", mudando o estado para FAZER_NADA e
-	 * liberta o semáforo para permitir a execução.
-	 */
-	
-	public void parar() {
-		dados.enviarParaConsola("Fugir: METODO PARAR FUGIR");
-		// System.out.println("Fugir: METODO PARAR FUGIR");
-
-		estado = FAZER_NADA;
-		//dados.enviarParaConsola("Fugir: Estado após parar: " + estado);
-		// System.out.println("Fugir: Estado após parar: " + estado);
-
-		//dados.enviarParaConsola("Fugir: Permissões após release do parar: " + fugirAFuncionar.availablePermits());
-		// System.out.println("Fugir: Permissões após release do parar: " +
-		// fugirAFuncionar.availablePermits());
-
-	}
-
-	/**
-	 * Para o robot e interrompe a execução do comportamento "Fugir". Define o
-	 * estado como TERMINAR e liberta o semáforo para sinalizar a paragem.
-	 */
-	public void pararRobot() {
-		robot.Parar(true); // Paragem Sincrona
-
-			estado = TERMINAR; // Define o estado como TERMINAR
-			fugirAFuncionar.release(); // Liberta o semáforo para parar a execução
-
-			dados.enviarParaConsola("Fugir: Parar Robot");
-		}
-
-	
-	// Outros Métodos
-
-	/**
-	 * Faz a thread dormir por um tempo específico, em milissegundos. Se a thread
-	 * for interrompida, a interrupção é tratada e a thread é marcada como
-	 * interrompida novamente.
-	 *
-	 * @param tempoMillis (long): O tempo em milissegundos para a pausa.
-	 */
-	private void dormir(long tempoMillis) {
-		try {
-			Thread.sleep(tempoMillis);
-		} catch (InterruptedException e) {
-			Thread.currentThread().interrupt();
-		}
-	}
-	public long tempoFugir() {
-		double t = 0;
-		double velocidade = 20;
-		double raio = 20;
-		double angulo = Math.PI / 2; 
-		double distanciaCurva = (raio * angulo);
-		
-		t = (t + ((distanciaCurva / velocidade)*2));
-		
-		double distanciaReta = 20;
-		t = (t + (distanciaReta / velocidade));
-		
-		return (long)(t * 1000);
-	}
+    /**
+     * Calcula o tempo teórico em milissegundos necessário para o robô executar 
+     * a manobra completa de fuga (curvas e deslocações retilíneas).
+     * 
+     * @return long: O tempo total da manobra de fuga em milissegundos.
+     */
+    public long tempoFugir() {
+        double t = 0;
+        double velocidade = 20;       // Velocidade estimada de deslocação (cm/s)
+        double raio = 20;             // Raio das curvas de fuga (cm)
+        double angulo = Math.PI / 2;  // Ângulo de rotação (90 graus em radianos)
+        double distanciaCurva = (raio * angulo); // Comprimento do arco da curva
+        
+        // Adiciona o tempo necessário para as duas curvas executadas na manobra
+        t = (t + ((distanciaCurva / velocidade) * 2));
+        
+        double distanciaReta = 20; // Distância percorrida em linha reta durante a fuga (cm)
+        // Adiciona o tempo do percurso em linha reta
+        t = (t + (distanciaReta / velocidade));
+        
+        // Converte o tempo total de segundos para milissegundos e devolve como long
+        return (long)(t * 1000);
+    }
 }
