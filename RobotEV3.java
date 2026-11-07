@@ -56,7 +56,7 @@ public class RobotEV3 {
 
 
     /**
-     * MÉTODO CHAVE DO ESTUDO COMPARATIVO:
+     * MÉTODO PARA O PROJETO:
      * Envolve qualquer ação do robô no tipo de mecanismo de bloqueio selecionado nas configurações.
      * 
      * @param acao Bloco de código (Runnable) a ser executado sob exclusão mútua.
