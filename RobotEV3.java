@@ -1,4 +1,6 @@
 import java.util.Random;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Ficheiro: RobotEV3.java
@@ -30,6 +32,8 @@ public class RobotEV3 {
     // Gerador de números aleatórios para decisões comportamentais
     private Random random;
 
+    private final Lock lock = new ReentrantLock();
+
     /**
      * Construtor da classe RobotEV3. Inicializa o robô em modo puramente simulado/virtual,
      * configurando as instâncias de apoio e registando o arranque na consola.
@@ -47,6 +51,36 @@ public class RobotEV3 {
                         : "Nome não definido"));
         
         this.random = new Random();
+    }
+
+
+
+    /**
+     * MÉTODO CHAVE DO ESTUDO COMPARATIVO:
+     * Envolve qualquer ação do robô no tipo de mecanismo de bloqueio selecionado nas configurações.
+     * 
+     * @param acao Bloco de código (Runnable) a ser executado sob exclusão mútua.
+     */
+    private void executarComBloqueio(Runnable acao) {
+        if (dados.isUseReentrantLock()) {
+            // CENÁRIO A: Utilização de ReentrantLock (bloqueio explícito)
+            // Adquire o lock. Se outra thread estiver a usar, a atual aguarda sem prender a carrier thread.
+            lock.lock();
+            try {
+                acao.run();
+            } finally {
+                // O bloco finally garante rigorosamente a libertação do lock, prevenindo deadlocks
+                // mesmo em caso de exceções imprevistas durante a simulação.
+                lock.unlock();
+            }
+        } else {
+            // CENÁRIO B: Utilização de monitor intrínseco (synchronized)
+            // Utiliza a própria instância (this) como monitor. No JDK 21, se a thread adormecer 
+            // ou bloquear aqui dentro, provocará 'VirtualThreadPinned' na carrier thread de suporte.
+            synchronized (this) {
+                acao.run();
+            }
+        }
     }
 
     /**

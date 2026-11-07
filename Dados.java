@@ -24,6 +24,12 @@ public class Dados {
     // Indica se o robot está a operar no modo real (físico) ou simulado
     private boolean robotReal;
 
+
+
+    private boolean reentrantLock = false; // // false = synchronized, true = ReentrantLock
+
+
+
     /**
      * Construtor por defeito da classe Dados.
      * Inicializa o robot com o nome padrão "EVA" e todas as flags desativadas (false).
@@ -181,5 +187,24 @@ public class Dados {
         if (debug) { // Verifica se o modo debug está ativo antes de escrever
             System.out.println(texto);
         }
+    }
+
+    /**
+     * Retorna o estado do uso de ReentrantLock.
+     *
+     * @return boolean: Retorna true se o robot estiver a usar ReentrantLock, false caso contrário.
+     */
+    public boolean isUseReentrantLock() {
+        return reentrantLock;
+    }
+
+
+    /**
+     * Define o estado do uso de ReentrantLock.
+     *
+     * @param reentrantLock (boolean): true para ativar o uso de ReentrantLock, false para desativar.
+     */
+    public void setUseReentrantLock(boolean reentrantLock) {
+        this.reentrantLock = reentrantLock;
     }
 }
